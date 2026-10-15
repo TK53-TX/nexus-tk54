@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DMAIC Process Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Interactive, accessible simulation of the Lean Six Sigma DMAIC improvement process.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout concept: one dark "instrument" stage holding the process diagram and its transport
+   controls, followed by an inspector and a phase log. Single deliberate dark look. */
+:root {
+  color-scheme: dark;
+  --bg-0: #050b1f;
+  --bg-1: #0a1640;
+  --bg-2: #12286b;
+  --surface: rgba(18, 34, 84, 0.55);
+  --surface-solid: #0e1b45;
+  --surface-raised: #132457;
+  --line: rgba(130, 165, 255, 0.16);
+  --line-strong: rgba(130, 165, 255, 0.32);
+  --fg: #e9efff;
+  --fg-muted: #a7b6dd;
+  --fg-faint: #8193c2;
+  --blue: #3b82f6;
+  --cyan: #22d3ee;
+  --violet: #8b5cf6;
+  --teal: #2dd4bf;
+  --indigo: #6366f1;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb7185;
+  --focus: #67e8f9;
+  --font-display: "Sora", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius-lg: 28px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --speed: 1;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--bg-0); }
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--fg);
+  font: 400 15px/1.55 var(--font-body);
+  background:
+    radial-gradient(1100px 620px at 50% -12%, rgba(41, 84, 196, 0.55) 0%, transparent 62%),
+    radial-gradient(800px 560px at 105% 95%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
+    radial-gradient(700px 500px at -10% 70%, rgba(34, 211, 238, 0.08) 0%, transparent 60%),
+    var(--bg-0);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+.page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 20px;
+}
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+[hidden] { display: none !important; }
+
+/* ---------- Header ---------- */
+.masthead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; }
+.masthead-text { min-width: 0; max-width: 62ch; }
+.eyebrow {
+  margin: 0 0 6px; font: 500 12px/1.4 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--cyan);
+}
+h1 {
+  margin: 0; font: 700 clamp(30px, 5vw, 46px)/1.05 var(--font-display); letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+h1 .acronym { background: linear-gradient(100deg, #8fb6ff, #6ee7f9 45%, #b49bff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { margin: 10px 0 0; color: var(--fg-muted); font-size: 16px; }
+.masthead-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.sim-badge {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px;
+  font: 600 12px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase;
+  color: #fde68a; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.4);
+}
+.sim-badge svg { width: 14px; height: 14px; }
+.status {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 7px 14px; border-radius: 999px;
+  font: 600 13px/1 var(--font-body); background: var(--surface); border: 1px solid var(--line-strong);
+}
+.status-glyph { font: 700 13px/1 var(--font-mono); min-width: 1em; text-align: center; letter-spacing: -0.1em; }
+.status[data-status="playing"] { color: #a5f3fc; border-color: rgba(34, 211, 238, 0.5); }
+.status[data-status="paused"] { color: #c7d2fe; }
+.status[data-status="waiting"] { color: #fde68a; border-color: rgba(251, 191, 36, 0.5); }
+.status[data-status="completed"] { color: #a7f3d0; border-color: rgba(52, 211, 153, 0.55); }
+.status[data-status="blocked"], .status[data-status="invalid"] { color: #fecdd3; border-color: rgba(251, 113, 133, 0.6); }
+
+/* ---------- Stage ---------- */
+.stage {
+  position: relative; border-radius: var(--radius-lg); border: 1px solid var(--line);
+  background:
+    radial-gradient(rgba(140, 170, 255, 0.10) 1px, transparent 1.3px) 0 0 / 22px 22px,
+    linear-gradient(180deg, rgba(22, 42, 104, 0.62), rgba(9, 18, 48, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 30px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.stage-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px;
+  padding: 18px 22px 0;
+}
+.stage-head h2 { margin: 0; font: 600 15px/1.3 var(--font-display); color: var(--fg); }
+.stage-head p { margin: 0; color: var(--fg-faint); font: 400 12.5px/1.4 var(--font-mono); }
+.diagram-scroll { overflow-x: auto; overflow-y: hidden; }
+.diagram { position: relative; margin: 6px 18px 0; min-height: 200px; }
+.connectors { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.conn-base { fill: none; stroke: rgba(130, 160, 240, 0.28); stroke-width: 2; stroke-dasharray: 3 7; stroke-linecap: round; }
+.conn-fill { fill: none; stroke: url(#connGrad); stroke-width: 3; stroke-linecap: round; opacity: 0; }
+.conn-flow { fill: none; stroke: rgba(190, 240, 255, 0.85); stroke-width: 1.6; stroke-dasharray: 2 14; stroke-linecap: round; opacity: 0; }
+.conn[data-state="transit"] .conn-fill { opacity: 1; }
+.conn[data-state="transit"] .conn-flow { opacity: 0.9; }
+.conn[data-state="transit"] .conn-base { stroke: rgba(130, 200, 255, 0.35); }
+.conn[data-state="done"] .conn-base { stroke: rgba(110, 200, 255, 0.55); stroke-dasharray: none; stroke-width: 2.4; }
+.conn[data-state="skipped"] .conn-base { stroke: rgba(150, 160, 190, 0.22); stroke-dasharray: 1 9; }
+.conn-label {
+  position: absolute; transform: translate(-50%, -50%); padding: 3px 9px; border-radius: 999px; white-space: nowrap; text-align: center;
+  font: 500 11.5px/1.3 var(--font-mono); color: var(--fg-muted); background: var(--surface-solid); border: 1px solid var(--line);
+  pointer-events: none;
+}
+.conn-label[data-state="skipped"] { color: var(--fg-faint); text-decoration: line-through; }
+.conn-label[data-state="transit"], .conn-label[data-state="done"] { color: #bae6fd; border-color: rgba(56, 189, 248, 0.45); }
+
+/* ---------- Nodes ---------- */
+.node {
+  --icon: 104px;
+  position: absolute; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 0 6px 10px; margin: 0; border: 0; border-radius: 22px; background: transparent; color: inherit;
+  font: inherit; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.node.is-row { flex-direction: row; text-align: left; gap: 14px; padding: 0 10px 0 0; align-items: center; }
+.node::before {
+  content: ""; position: absolute; inset: 4px 0 0; border-radius: inherit; border: 1px solid transparent;
+  transition: border-color 200ms, background 200ms;
+}
+.node:hover::before { border-color: var(--line); background: rgba(120, 160, 255, 0.04); }
+.node[aria-pressed="true"]::before { border-color: rgba(103, 232, 249, 0.55); background: rgba(103, 232, 249, 0.06); }
+.node-visual { position: relative; flex: none; width: calc(var(--icon) + 28px); height: calc(var(--icon) + 28px); }
+.halo {
+  position: absolute; inset: -10px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(closest-side, var(--node-glow, rgba(59, 130, 246, 0.55)), transparent 72%);
+  transition: opacity calc(500ms / var(--speed)) ease;
+}
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.ring-track { fill: none; stroke: rgba(140, 170, 255, 0.12); stroke-width: 2.5; }
+.ring-progress { fill: none; stroke: var(--node-color, #3b82f6); stroke-width: 3.5; stroke-linecap: round; opacity: 0; transition: opacity calc(300ms / var(--speed)); }
+.lift {
+  position: absolute; left: 14px; top: 14px; width: var(--icon); height: var(--icon);
+  transition: transform calc(520ms / var(--speed)) cubic-bezier(.2, .8, .2, 1), filter calc(520ms / var(--speed)) ease;
+  filter: saturate(0.28) brightness(0.62);
+}
+.float { width: 100%; height: 100%; will-change: transform; }
+.float svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ground {
+  position: absolute; left: 50%; bottom: 4px; width: calc(var(--icon) * 0.72); height: 14px; margin-left: calc(var(--icon) * -0.36);
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(0, 4, 20, 0.7), transparent); transform-origin: center;
+}
+.badge {
+  position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; border-radius: 50%; display: none;
+  align-items: center; justify-content: center; border: 2px solid var(--bg-1);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.badge svg { width: 14px; height: 14px; }
+.node-text { position: relative; display: grid; gap: 3px; justify-items: center; min-width: 0; }
+.node.is-row .node-text { justify-items: start; }
+.node-kicker { font: 500 11px/1.3 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-faint); }
+.node-name { font: 600 17px/1.2 var(--font-display); color: var(--fg-muted); transition: color 300ms; }
+.node-summary { font-size: 12.5px; line-height: 1.4; color: var(--fg-faint); max-width: 22ch; }
+.node.is-row .node-summary { max-width: 34ch; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 3px; padding: 3px 10px 3px 7px; border-radius: 999px;
+  font: 500 11.5px/1.2 var(--font-mono); color: var(--fg-faint); background: rgba(10, 20, 52, 0.75); border: 1px solid var(--line);
+}
+.chip svg { width: 12px; height: 12px; flex: none; }
+
+.node[data-state="ready"] .lift { filter: saturate(0.65) brightness(0.86); }
+.node[data-state="ready"] .ring-track { stroke: var(--node-color); stroke-dasharray: 4 6; opacity: 0.7; }
+.node[data-state="ready"] .chip { color: #c7d2fe; border-color: rgba(129, 140, 248, 0.5); }
+.node[data-state="active"] .lift { transform: translateY(-8px) scale(1.06); filter: none; }
+.node[data-state="active"] .halo { opacity: 1; }
+.node[data-state="active"] .ring-progress { opacity: 1; }
+.node[data-state="active"] .node-name { color: var(--fg); }
+.node[data-state="active"] .chip { color: #a5f3fc; border-color: rgba(34, 211, 238, 0.6); background: rgba(8, 50, 70, 0.7); }
+.node[data-state="completed"] .lift { filter: saturate(0.92) brightness(0.96); }
+.node[data-state="completed"] .halo { opacity: 0.22; }
+.node[data-state="completed"] .ring-progress { opacity: 0.45; }
+.node[data-state="completed"] .node-name { color: var(--fg); }
+.node[data-state="completed"] .chip { color: #a7f3d0; border-color: rgba(52, 211, 153, 0.5); }
+.node[data-state="completed"] .badge { display: flex; background: linear-gradient(160deg, #6ee7b7, #059669); }
+.node[data-state="blocked"] .lift { filter: saturate(0.2) brightness(0.55); }
+.node[data-state="blocked"] .ring-track { stroke: var(--bad); stroke-dasharray: 2 5; opacity: 0.8; }
+.node[data-state="blocked"] .chip { color: #fecdd3; border-color: rgba(251, 113, 133, 0.6); }
+.node[data-state="blocked"] .badge { display: flex; background: linear-gradient(160deg, #fda4af, #e11d48); }
+.node[data-state="skipped"] { opacity: 0.55; }
+.node[data-state="skipped"] .lift { filter: grayscale(1) brightness(0.5); }
+.node[data-state="skipped"] .node-name { text-decoration: line-through; text-decoration-color: rgba(167, 182, 221, 0.6); }
+.node[data-state="skipped"] .badge { display: flex; background: linear-gradient(160deg, #94a3b8, #475569); }
+
+/* ---------- Transport ---------- */
+.transport {
+  display: grid; gap: 14px; padding: 16px 22px 20px; margin-top: 6px;
+  border-top: 1px solid var(--line); background: rgba(6, 13, 36, 0.55);
+}
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; min-width: 44px;
+  padding: 0 18px; border-radius: 999px; border: 1px solid var(--line-strong); cursor: pointer;
+  font: 600 14px/1 var(--font-body); color: var(--fg); background: linear-gradient(180deg, #1a2d66, #11204d);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 16px rgba(0, 0, 0, 0.3);
+  transition: transform 120ms, border-color 160ms, background 160ms;
+}
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn:hover:not(:disabled) { border-color: rgba(103, 232, 249, 0.55); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary {
+  min-width: 132px; color: #04131f; border-color: transparent;
+  background: linear-gradient(180deg, #7dd3fc 0%, #22d3ee 55%, #0ea5e9 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 8px 22px rgba(14, 165, 233, 0.35);
+}
+.btn-primary:hover:not(:disabled) { border-color: transparent; filter: brightness(1.06); }
+.speed { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; }
+.speed label, .toggle span { font-size: 13.5px; color: var(--fg-muted); }
+.speed input[type="range"] { width: 150px; accent-color: var(--cyan); min-height: 44px; margin: 0; cursor: pointer; }
+.speed output { min-width: 4.2ch; font: 500 13px/1 var(--font-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.toggle { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--cyan); margin: 0; cursor: pointer; }
+.spacer { flex: 1 1 auto; }
+.progress { display: grid; gap: 8px; }
+.progress-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 13px; color: var(--fg-muted); }
+.clock { font: 500 12.5px/1.4 var(--font-mono); color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.progress-track { position: relative; height: 8px; border-radius: 999px; background: rgba(120, 150, 230, 0.14); overflow: hidden; }
+.progress-fill {
+  position: absolute; inset: 0 auto 0 0; width: 0%; border-radius: inherit;
+  background: linear-gradient(90deg, #3b82f6, #22d3ee 60%, #a78bfa);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.55);
+}
+.decision {
+  display: grid; gap: 10px; padding: 14px 16px; border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.42);
+}
+.decision h3 { margin: 0; font: 600 14.5px/1.3 var(--font-display); color: #fde68a; }
+.decision p { margin: 0; color: var(--fg-muted); font-size: 14px; }
+.decision-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.completion {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border-radius: var(--radius-sm);
+  background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.42); color: #d1fae5; font-size: 14px;
+}
+.completion strong { font-family: var(--font-display); }
+.blocked-note {
+  padding: 12px 16px; border-radius: var(--radius-sm); background: rgba(251, 113, 133, 0.08);
+  border: 1px solid rgba(251, 113, 133, 0.45); color: #ffe4e6; font-size: 14px;
+}
+.blocked-note ul { margin: 6px 0 0; padding-left: 20px; }
+
+/* ---------- Error panel ---------- */
+.error-panel {
+  margin: 18px 22px; padding: 18px 20px; border-radius: var(--radius-md);
+  background: rgba(251, 113, 133, 0.08); border: 1px solid rgba(251, 113, 133, 0.5);
+}
+.error-panel h2 { margin: 0 0 6px; font: 600 16px/1.3 var(--font-display); color: #fecdd3; }
+.error-panel p { margin: 0 0 8px; color: var(--fg-muted); }
+.error-panel ul { margin: 0; padding-left: 20px; color: #ffe4e6; font-size: 14px; }
+.error-panel li + li { margin-top: 4px; }
+
+/* ---------- Detail grid ---------- */
+.details { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.panel {
+  min-width: 0; padding: 20px 22px; border-radius: var(--radius-lg); border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(18, 34, 84, 0.55), rgba(10, 20, 52, 0.55));
+}
+.panel h2 { margin: 0; font: 600 13px/1.3 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-faint); }
+.panel-note { margin: 4px 0 0; font-size: 12.5px; color: var(--fg-faint); }
+.inspector-head { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+.inspector-icon { width: 64px; height: 64px; flex: none; }
+.inspector-icon svg { width: 100%; height: 100%; overflow: visible; }
+.inspector-title { min-width: 0; display: grid; gap: 4px; }
+.inspector-title h3 { margin: 0; font: 700 24px/1.15 var(--font-display); letter-spacing: -0.01em; }
+.inspector-desc { margin: 14px 0 0; color: var(--fg-muted); max-width: 62ch; }
+.io-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+.io-grid h4, .rel h4 { margin: 0 0 6px; font: 600 11.5px/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-faint); }
+.io-grid ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.io-grid li {
+  padding: 7px 10px; border-radius: 10px; font-size: 13.5px; line-height: 1.35;
+  background: rgba(10, 20, 52, 0.6); border: 1px solid var(--line);
+}
+.rel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rel p { margin: 0; font-size: 13.5px; color: var(--fg-muted); }
+.rel .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.log-wrap { margin-top: 12px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { font: 600 11px/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-faint); }
+td.mono { font-family: var(--font-mono); font-size: 12.5px; color: var(--fg-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.log-btn {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 6px; margin: -6px 0; border: 0; border-radius: 8px;
+  background: none; color: var(--fg); font: 600 14px/1.2 var(--font-display); cursor: pointer; text-align: left;
+}
+.log-btn:hover { color: #a5f3fc; }
+.log-btn[aria-current="true"] { color: #67e8f9; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 14px; margin: 14px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); }
+.legend div { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; }
+.legend dt { display: contents; }
+.legend dd { margin: 0; grid-column: 2; font-size: 12.5px; color: var(--fg-faint); }
+.legend .chip { margin: 0; grid-column: 1 / -1; justify-self: start; }
+.legend .chip[data-state="ready"] { color: #c7d2fe; border-color: rgba(129, 140, 248, 0.5); }
+.legend .chip[data-state="active"] { color: #a5f3fc; border-color: rgba(34, 211, 238, 0.6); }
+.legend .chip[data-state="completed"] { color: #a7f3d0; border-color: rgba(52, 211, 153, 0.5); }
+.legend .chip[data-state="blocked"] { color: #fecdd3; border-color: rgba(251, 113, 133, 0.6); }
+.legend .chip[data-state="skipped"] { color: var(--fg-faint); }
+.footnote { margin: 0; font-size: 12.5px; color: var(--fg-faint); max-width: 90ch; }
+
+@media (max-width: 900px) {
+  .details { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .stage-head { padding: 16px 16px 0; }
+  .diagram { margin: 6px 12px 0; }
+  .transport { padding: 14px 16px 18px; }
+  .panel { padding: 18px 16px; }
+  .speed { flex: 1 1 100%; }
+  .speed input[type="range"] { flex: 1 1 auto; width: auto; }
+  .rel { grid-template-columns: minmax(0, 1fr); }
+  .btn-primary { flex: 1 1 auto; }
+}
+@media (max-width: 420px) {
+  .io-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lift, .halo, .ring-progress, .btn, .node-name { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="masthead-text">
+      <p class="eyebrow">Lean Six Sigma · Improvement cycle</p>
+      <h1 id="process-title"><span class="acronym">DMAIC</span></h1>
+      <p class="lede" id="process-desc"></p>
+    </div>
+    <div class="masthead-meta">
+      <span class="sim-badge" title="Example timings only. Not connected to project data.">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.5v4l2.6 1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Simulation
+      </span>
+      <p class="status" id="status" data-status="ready"><span class="status-glyph" aria-hidden="true">○</span><span id="status-text">Ready</span></p>
+    </div>
+  </header>
+
+  <main class="stage" aria-labelledby="stage-title">
+    <div class="stage-head">
+      <h2 id="stage-title">Process flow</h2>
+      <p id="stage-hint">Select a phase to inspect it. Inspecting does not change the simulation.</p>
+    </div>
+    <div id="error-panel" class="error-panel" role="alert" hidden>
+      <h2>This process configuration cannot be animated</h2>
+      <p>Fix the following problems in <code>PROCESS_CONFIG</code>, then reload the page.</p>
+      <ul id="error-list"></ul>
+    </div>
+    <div class="diagram-scroll">
+      <div class="diagram" id="diagram" role="group" aria-labelledby="stage-title" aria-describedby="flow-summary">
+        <svg class="connectors" id="connectors" aria-hidden="true" focusable="false"></svg>
+      </div>
+    </div>
+    <p class="visually-hidden" id="flow-summary"></p>
+
+    <div class="transport">
+      <div class="controls" role="group" aria-label="Playback controls">
+        <button type="button" class="btn btn-primary" id="btn-play"><span id="btn-play-icon" aria-hidden="true"></span><span id="btn-play-label">Play</span></button>
+        <button type="button" class="btn" id="btn-replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8a4.8 4.8 0 1 0 1.5-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 2.2v3.2h3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Replay</span></button>
+        <div class="speed">
+          <label for="speed">Speed</label>
+          <input type="range" id="speed" min="0.5" max="3" step="0.25" value="1" aria-valuetext="1 times">
+          <output id="speed-out" for="speed">1.00×</output>
+        </div>
+        <span class="spacer"></span>
+        <label class="toggle"><input type="checkbox" id="loop"><span>Repeat when complete</span></label>
+      </div>
+      <div class="progress">
+        <div class="progress-head">
+          <span id="progress-label">0 of 5 phases complete</span>
+          <span class="clock" id="clock" aria-hidden="true">Simulated time 0:00.0</span>
+        </div>
+        <div class="progress-track" id="progress-track" role="progressbar" aria-labelledby="progress-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+      <section class="decision" id="decision" role="group" aria-labelledby="decision-title" hidden>
+        <h3 id="decision-title">Decision required</h3>
+        <p id="decision-prompt"></p>
+        <div class="decision-options" id="decision-options"></div>
+      </section>
+      <div class="completion" id="completion" hidden>
+        <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#10b981"/><path d="M6 10.4l2.6 2.6L14 7.4" fill="none" stroke="#ecfdf5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="completion-text"></span>
+      </div>
+      <div class="blocked-note" id="blocked-note" hidden></div>
+    </div>
+  </main>
+
+  <div class="details">
+    <section class="panel" aria-labelledby="inspector-title">
+      <h2 id="inspector-title">Inspector</h2>
+      <p class="panel-note">Shows the selected phase. Selecting a phase never moves the simulation.</p>
+      <div id="inspector-body"></div>
+    </section>
+    <section class="panel" aria-labelledby="log-title">
+      <h2 id="log-title">Phase log</h2>
+      <p class="panel-note">Text view of the same simulation. Times are simulated, not measured.</p>
+      <div class="log-wrap">
+        <table>
+          <caption class="visually-hidden">Phase states and simulated start and finish times</caption>
+          <thead><tr><th scope="col">Phase</th><th scope="col">State</th><th scope="col">Start</th><th scope="col">Finish</th></tr></thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+      <dl class="legend" id="legend"></dl>
+    </section>
+  </div>
+
+  <p class="footnote">Simulation only. Phase timing is illustrative and no project or operational data is connected. Phase content follows the standard DMAIC deliverables; replace it with your project's charter, data and tollgate criteria in <code>PROCESS_CONFIG</code>.</p>
+</div>
+<div class="visually-hidden" id="announcer" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   1. PROCESS CONFIGURATION  (single source of truth; edit here)
+   ---------------------------------------------------------------------
+   activities[]  id (unique, stable), name, type ("phase" | "task" | "decision" | "start" | "end" | "subprocess"),
+                 description, summary (short label under the icon), inputs[], outputs[],
+                 icon { glyph: "target"|"gauge"|"analyze"|"improve"|"control"|"design"|"automate"|"optimize"|"generic", color: "#rrggbb" },
+                 join ("and" = wait for every incoming path, "or" = wait for every live path) when it has 2+ incoming connections,
+                 decision { mode: "user" | "config", choose: "<connection id>", prompt } for type "decision",
+                 durationMs (optional per-activity simulated duration).
+   connections[] id (unique), source, target, label (optional), condition (only on decision outputs).
+   process       name, description, flowType ("linear"|"circular"|"branched"|"parallel"|"mixed"),
+                 start[], completion { mode: "all"|"any", activities[] },
+                 loop { mode: "stop"|"restart", maxCycles: null|n, restartDelayMs },
+                 animation { speed 0.5..3, activityMs, transitionMs, readyMs }.
+   ===================================================================== */
+const PROCESS_CONFIG = {
+  process: {
+    name: 'DMAIC',
+    description: 'Define, Measure, Analyze, Improve, Control: the data-driven Lean Six Sigma cycle for improving an existing process. Each phase hands its outputs to the next.',
+    flowType: 'linear',
+    start: ['define'],
+    completion: { mode: 'all', activities: ['control'] },
+    loop: { mode: 'stop', maxCycles: null, restartDelayMs: 2400 },
+    animation: { speed: 1, activityMs: 2800, transitionMs: 1300, readyMs: 450 }
+  },
+  activities: [
+    {
+      id: 'define', name: 'Define', type: 'phase',
+      summary: 'Problem, scope and goal',
+      description: 'Frame the problem, project scope and improvement goal from the customer’s point of view, and secure sponsor agreement on the charter.',
+      inputs: ['Business case', 'Voice of the customer (VOC)', 'Sponsor priorities'],
+      outputs: ['Project charter', 'SIPOC map', 'Critical-to-quality (CTQ) requirements'],
+      icon: { glyph: 'target', color: '#3b82f6' }
+    },
+    {
+      id: 'measure', name: 'Measure', type: 'phase',
+      summary: 'Baseline current performance',
+      description: 'Establish how the process performs today, using a measurement system that has been shown to be reliable.',
+      inputs: ['Project charter', 'CTQ requirements', 'SIPOC map'],
+      outputs: ['Data collection plan', 'Measurement system analysis (Gage R&R)', 'Baseline capability (sigma level, DPMO)'],
+      icon: { glyph: 'gauge', color: '#06b6d4' }
+    },
+    {
+      id: 'analyze', name: 'Analyze', type: 'phase',
+      summary: 'Find verified root causes',
+      description: 'Identify the sources of defects and variation and confirm the critical root causes with data.',
+      inputs: ['Baseline data', 'Detailed process map'],
+      outputs: ['Cause-and-effect (fishbone) analysis', 'Hypothesis test results', 'Verified root causes'],
+      icon: { glyph: 'analyze', color: '#8b5cf6' }
+    },
+    {
+      id: 'improve', name: 'Improve', type: 'phase',
+      summary: 'Design and pilot solutions',
+      description: 'Develop, test and implement solutions that remove the verified root causes, and confirm the gain against the baseline.',
+      inputs: ['Verified root causes', 'Baseline capability'],
+      outputs: ['Selected solutions', 'Solution FMEA', 'Pilot results', 'Implementation plan'],
+      icon: { glyph: 'improve', color: '#14b8a6' }
+    },
+    {
+      id: 'control', name: 'Control', type: 'phase',
+      summary: 'Sustain the gain',
+      description: 'Lock in the improvement with monitoring and standard work, then hand the process back to its owner.',
+      inputs: ['Implemented solution', 'Pilot results'],
+      outputs: ['Control plan', 'SPC control charts', 'Standard work and owner handoff'],
+      icon: { glyph: 'control', color: '#6366f1' }
+    }
+  ],
+  connections: [
+    { id: 'c-define-measure', source: 'define', target: 'measure', label: 'Charter, CTQs' },
+    { id: 'c-measure-analyze', source: 'measure', target: 'analyze', label: 'Baseline data' },
+    { id: 'c-analyze-improve', source: 'analyze', target: 'improve', label: 'Root causes' },
+    { id: 'c-improve-control', source: 'improve', target: 'control', label: 'Proven solution' }
+  ]
+};
+
+/* =====================================================================
+   2. VALIDATION
+   ===================================================================== */
+const ACTIVITY_TYPES = ['phase', 'task', 'decision', 'start', 'end', 'subprocess'];
+const FLOW_TYPES = ['linear', 'circular', 'branched', 'parallel', 'mixed'];
+const JOIN_RULES = ['and', 'or'];
+const isText = v => typeof v === 'string' && v.trim().length > 0;
+
+function validateConfig(cfg) {
+  const errors = [];
+  const warnings = [];
+  const err = m => errors.push(m);
+  if (!cfg || typeof cfg !== 'object') return { valid: false, errors: ['The configuration is missing or is not an object.'], warnings };
+  const p = cfg.process && typeof cfg.process === 'object' ? cfg.process : (err('The "process" section is missing.'), {});
+  if (!isText(p.name)) err('process.name is required.');
+  if (!FLOW_TYPES.includes(p.flowType)) err(`process.flowType must be one of: ${FLOW_TYPES.join(', ')}.`);
+  const acts = Array.isArray(cfg.activities) ? cfg.activities : (err('"activities" must be an array.'), []);
+  const conns = Array.isArray(cfg.connections) ? cfg.connections : (err('"connections" must be an array.'), []);
+  if (Array.isArray(cfg.activities) && !acts.length) err('At least one activity is required.');
+
+  const byId = new Map();
+  acts.forEach((a, i) => {
+    if (!a || !isText(a.id)) { err(`Activity #${i + 1} has no id.`); return; }
+    if (byId.has(a.id)) { err(`Duplicate activity id "${a.id}".`); return; }
+    byId.set(a.id, a);
+    if (!isText(a.name)) err(`Activity "${a.id}" has no name.`);
+    if (!ACTIVITY_TYPES.includes(a.type)) err(`Activity "${a.id}" has unsupported type "${a.type}". Use one of: ${ACTIVITY_TYPES.join(', ')}.`);
+    if (a.join !== undefined && !JOIN_RULES.includes(a.join)) err(`Activity "${a.id}" has unsupported merge rule "${a.join}". Use "and" or "or".`);
+    if (a.durationMs !== undefined && !(typeof a.durationMs === 'number' && a.durationMs > 0)) err(`Activity "${a.id}" has an invalid durationMs.`);
+    ['inputs', 'outputs'].forEach(k => { if (a[k] !== undefined && !Array.isArray(a[k])) err(`Activity "${a.id}" ${k} must be a list.`); });
+  });
+
+  const inc = new Map(); const out = new Map();
+  byId.forEach((_, id) => { inc.set(id, []); out.set(id, []); });
+  const connIds = new Set(); const pairs = new Set();
+  conns.forEach((c, i) => {
+    if (!c || !isText(c.id)) { err(`Connection #${i + 1} has no id.`); return; }
+    if (connIds.has(c.id)) { err(`Duplicate connection id "${c.id}".`); return; }
+    connIds.add(c.id);
+    if (byId.has(c.id)) err(`Connection id "${c.id}" is also used by an activity. Identifiers must be unique.`);
+    let ok = true;
+    if (!byId.has(c.source)) { err(`Connection "${c.id}" references missing source activity "${c.source}".`); ok = false; }
+    if (!byId.has(c.target)) { err(`Connection "${c.id}" references missing target activity "${c.target}".`); ok = false; }
+    if (ok && c.source === c.target) { err(`Connection "${c.id}" connects "${c.source}" to itself.`); ok = false; }
+    if (ok) {
+      const key = c.source + '→' + c.target;
+      if (pairs.has(key)) err(`Connection "${c.id}" duplicates an existing connection from "${c.source}" to "${c.target}".`);
+      pairs.add(key);
+      out.get(c.source).push(c); inc.get(c.target).push(c);
+    }
+  });
+
+  const start = Array.isArray(p.start) ? p.start : [];
+  if (!start.length) err('process.start must list at least one starting activity.');
+  start.forEach(id => {
+    if (!byId.has(id)) err(`Starting activity "${id}" does not exist.`);
+    else if (inc.get(id).length) err(`Starting activity "${id}" has incoming connections. A starting activity cannot depend on other activities.`);
+  });
+
+  byId.forEach((a, id) => {
+    const o = out.get(id); const n = inc.get(id);
+    if (a.type === 'decision') {
+      const d = a.decision || {};
+      if (o.length < 2) err(`Decision "${id}" needs at least two outgoing connections.`);
+      if (!['user', 'config'].includes(d.mode)) err(`Decision "${id}" must set decision.mode to "user" (viewer chooses) or "config" (fixed outcome).`);
+      if (d.mode === 'config' && !o.some(c => c.id === d.choose)) err(`Decision "${id}" uses mode "config" but decision.choose ("${d.choose}") is not one of its outgoing connections.`);
+      o.forEach(c => { if (!isText(c.condition) && !isText(c.label)) err(`Connection "${c.id}" leaves decision "${id}" but has no condition or label, so the outcome cannot be shown.`); });
+    } else {
+      if (a.decision) err(`Activity "${id}" defines decision rules but its type is "${a.type}", not "decision".`);
+      o.forEach(c => { if (c.condition !== undefined) err(`Unsupported decision condition on "${c.id}": conditions are only allowed on connections leaving a decision activity.`); });
+    }
+    if (n.length > 1 && !JOIN_RULES.includes(a.join)) err(`Activity "${id}" merges ${n.length} incoming connections but has no merge rule. Set join to "and" (wait for all) or "or" (wait for every live path).`);
+    if (n.length <= 1 && a.join !== undefined) warnings.push(`Activity "${id}" defines a merge rule but has fewer than two incoming connections.`);
+  });
+
+  // Cycle detection (Kahn). Repetition is expressed with process.loop, never with circular dependencies.
+  if (byId.size) {
+    const indeg = new Map(); byId.forEach((_, id) => indeg.set(id, inc.get(id).length));
+    const queue = [...indeg].filter(([, d]) => d === 0).map(([id]) => id); let seen = 0;
+    while (queue.length) { const id = queue.shift(); seen++; out.get(id).forEach(c => { indeg.set(c.target, indeg.get(c.target) - 1); if (indeg.get(c.target) === 0) queue.push(c.target); }); }
+    if (seen < byId.size) {
+      const cyc = [...indeg].filter(([, d]) => d > 0).map(([id]) => `"${id}"`);
+      err(`Circular dependency between ${cyc.join(', ')}. Use process.loop to repeat a process instead of connecting it back to itself.`);
+    }
+    // Reachability
+    const reach = new Set(); const stack = start.filter(id => byId.has(id));
+    while (stack.length) { const id = stack.pop(); if (reach.has(id)) continue; reach.add(id); out.get(id).forEach(c => stack.push(c.target)); }
+    byId.forEach((_, id) => { if (!reach.has(id)) err(`Activity "${id}" is unreachable from the starting activities.`); });
+  }
+
+  const comp = p.completion || {};
+  if (!['all', 'any'].includes(comp.mode)) err('process.completion.mode must be "all" or "any".');
+  if (!Array.isArray(comp.activities) || !comp.activities.length) err('process.completion.activities must name at least one activity.');
+  else comp.activities.forEach(id => {
+    if (!byId.has(id)) err(`Completion activity "${id}" does not exist.`);
+    else if (out.get(id).length) err(`Completion activity "${id}" has outgoing connections. Completion must name terminal activities.`);
+  });
+
+  const loop = p.loop || {};
+  if (!['stop', 'restart'].includes(loop.mode)) err('process.loop.mode must be "stop" or "restart".');
+  if (loop.maxCycles !== undefined && loop.maxCycles !== null && !(Number.isInteger(loop.maxCycles) && loop.maxCycles > 0)) err('process.loop.maxCycles must be null (unlimited) or a positive whole number.');
+  if (loop.mode === 'stop' && loop.maxCycles) err('Conflicting loop rules: loop.mode is "stop" but loop.maxCycles is set.');
+  if (p.flowType === 'circular' && loop.mode !== 'restart') err(`Conflicting rules: flowType "circular" requires loop.mode "restart", but it is "${loop.mode}".`);
+  if (p.flowType === 'linear') {
+    if (start.length > 1) err('Conflicting rules: flowType "linear" allows only one starting activity.');
+    byId.forEach((_, id) => { if (out.get(id).length > 1 || inc.get(id).length > 1) err(`Conflicting rules: flowType "linear" but activity "${id}" branches or merges. Use "branched", "parallel" or "mixed".`); });
+  }
+
+  const an = p.animation || {};
+  if (!(typeof an.speed === 'number' && an.speed >= 0.5 && an.speed <= 3)) err('process.animation.speed must be a number from 0.5 to 3.');
+  if (!(an.activityMs > 0)) err('process.animation.activityMs must be greater than 0.');
+  if (!(an.transitionMs > 0)) err('process.animation.transitionMs must be greater than 0.');
+  if (!(an.readyMs >= 0)) err('process.animation.readyMs must be 0 or greater.');
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+/* =====================================================================
+   3. EXECUTION ENGINE  (pure logic; no timing, no DOM)
+   ===================================================================== */
+class ProcessEngine {
+  constructor(cfg) {
+    this.cfg = cfg;
+    this.acts = new Map(cfg.activities.map(a => [a.id, a]));
+    this.conns = new Map(cfg.connections.map(c => [c.id, c]));
+    this.out = new Map(); this.inc = new Map();
+    this.acts.forEach((_, id) => { this.out.set(id, []); this.inc.set(id, []); });
+    cfg.connections.forEach(c => { this.out.get(c.source).push(c); this.inc.get(c.target).push(c); });
+    this.reset();
+  }
+  reset() {
+    this.events = [];
+    this.actState = new Map(); this.connState = new Map();
+    this.pendingDecisions = new Set(); this.choices = new Map(); this.blockReasons = new Map();
+    this.acts.forEach((_, id) => this.actState.set(id, 'pending'));
+    this.conns.forEach((_, id) => this.connState.set(id, 'idle'));
+    this.events.push({ kind: 'reset' });
+    this.cfg.process.start.forEach(id => this._set(id, 'ready'));
+  }
+  drainEvents() { const e = this.events; this.events = []; return e; }
+  _set(id, s) { const from = this.actState.get(id); if (from === s) return; this.actState.set(id, s); this.events.push({ kind: 'activity', id, from, to: s }); }
+  _setConn(id, s) { const from = this.connState.get(id); if (from === s) return; this.connState.set(id, s); this.events.push({ kind: 'connection', id, from, to: s }); }
+  start(id) {
+    if (this.actState.get(id) !== 'ready') throw new Error(`Cannot start "${id}": it is ${this.actState.get(id)}.`);
+    this._set(id, 'active');
+  }
+  complete(id) {
+    if (this.actState.get(id) !== 'active') throw new Error(`Cannot complete "${id}": it is ${this.actState.get(id)}.`);
+    this._set(id, 'completed');
+    const outs = this.out.get(id);
+    if (!outs.length) return;
+    const a = this.acts.get(id);
+    if (a.type === 'decision') {
+      if (a.decision.mode === 'config') this._route(id, a.decision.choose);
+      else { this.pendingDecisions.add(id); this.events.push({ kind: 'decision', id }); }
+    } else {
+      outs.forEach(c => this._setConn(c.id, 'transit'));
+    }
+  }
+  choose(id, connId) {
+    if (!this.pendingDecisions.has(id)) throw new Error(`"${id}" is not waiting for a decision.`);
+    if (!this.out.get(id).some(c => c.id === connId)) throw new Error(`"${connId}" is not an outcome of "${id}".`);
+    this.pendingDecisions.delete(id);
+    this._route(id, connId);
+  }
+  _route(id, connId) {
+    this.choices.set(id, connId);
+    this.out.get(id).forEach(c => { if (c.id === connId) this._setConn(c.id, 'transit'); });
+    this.out.get(id).forEach(c => { if (c.id !== connId) { this._setConn(c.id, 'skipped'); this._evaluate(c.target); } });
+  }
+  arrive(connId) {
+    if (this.connState.get(connId) !== 'transit') throw new Error(`Connection "${connId}" is not in transit.`);
+    this._setConn(connId, 'done');
+    this._evaluate(this.conns.get(connId).target);
+  }
+  _evaluate(id) {
+    if (this.actState.get(id) !== 'pending') return;
+    const ins = this.inc.get(id);
+    const states = ins.map(c => this.connState.get(c.id));
+    const done = states.filter(s => s === 'done').length;
+    const skipped = states.filter(s => s === 'skipped').length;
+    if (skipped === ins.length) {
+      this._set(id, 'skipped');
+      this.out.get(id).forEach(c => { this._setConn(c.id, 'skipped'); this._evaluate(c.target); });
+      return;
+    }
+    const join = this.acts.get(id).join || 'and';
+    if (join === 'and') {
+      if (done === ins.length) this._set(id, 'ready');
+      else if (skipped > 0) {
+        const missing = ins.filter(c => this.connState.get(c.id) === 'skipped').map(c => this.acts.get(c.source).name);
+        this.blockReasons.set(id, `waits for all predecessors (AND merge), but ${missing.join(', ')} will not run on the selected path`);
+        this._set(id, 'blocked');
+      }
+    } else if (done > 0 && done + skipped === ins.length) {
+      this._set(id, 'ready');
+    }
+  }
+  hasWork() {
+    for (const s of this.actState.values()) if (s === 'ready' || s === 'active') return true;
+    for (const s of this.connState.values()) if (s === 'transit') return true;
+    return false;
+  }
+  completionMet() {
+    const c = this.cfg.process.completion;
+    const st = c.activities.map(id => this.actState.get(id));
+    return c.mode === 'all' ? st.every(s => s === 'completed') : st.some(s => s === 'completed');
+  }
+  status() {
+    if (this.hasWork()) return 'running';
+    if (this.pendingDecisions.size) return 'waiting';
+    if (this.completionMet()) return 'completed';
+    return 'blocked';
+  }
+  countableIds() { return [...this.acts.keys()].filter(id => this.actState.get(id) !== 'skipped'); }
+}
+
+/* =====================================================================
+   4. PLAYBACK CONTROLLER  (one logical clock drives every process animation)
+   ===================================================================== */
+class PlaybackController {
+  constructor(engine, cfg, onEvents) {
+    this.engine = engine; this.cfg = cfg; this.onEvents = onEvents;
+    const an = cfg.process.animation;
+    this.readyMs = an.readyMs; this.activityMs = an.activityMs; this.transitionMs = an.transitionMs;
+    this.speed = an.speed;
+    this.loopMode = cfg.process.loop.mode;
+    this.maxCycles = cfg.process.loop.maxCycles || null;
+    this.restartDelayMs = cfg.process.loop.restartDelayMs || 2000;
+    this.order = new Map(cfg.activities.map((a, i) => [a.id, i]));
+    this.connOrder = new Map(cfg.connections.map((c, i) => [c.id, i]));
+    this.cycle = 1;
+    this.reset();
+  }
+  reset() {
+    this.t = 0; this.now = 0; this.playing = false;
+    this.readyAt = new Map(); this.activeAt = new Map(); this.transitAt = new Map();
+    this.history = new Map();
+    this.completedAt = null; this.restartAt = null; this.engineStatus = 'running';
+    this.engine.reset();
+    this._ingest();
+  }
+  replay() { this.cycle = 1; this.reset(); }
+  durationOf(id) { return this.engine.acts.get(id).durationMs || this.activityMs; }
+  _ingest() {
+    const evs = this.engine.drainEvents();
+    for (const e of evs) {
+      if (e.kind === 'activity') {
+        const h = this.history.get(e.id) || {};
+        if (e.to === 'ready') this.readyAt.set(e.id, this.now);
+        if (e.to === 'active') { this.readyAt.delete(e.id); this.activeAt.set(e.id, this.now); h.start = this.now; }
+        if (e.to === 'completed') { this.activeAt.delete(e.id); h.end = this.now; }
+        if (e.to === 'skipped' || e.to === 'blocked') h.at = this.now;
+        this.history.set(e.id, h);
+      } else if (e.kind === 'connection') {
+        if (e.to === 'transit') this.transitAt.set(e.id, this.now);
+        else this.transitAt.delete(e.id);
+      }
+    }
+    const prev = this.engineStatus;
+    this.engineStatus = this.engine.status();
+    if (this.engineStatus === 'completed' && prev !== 'completed') {
+      this.completedAt = this.now;
+      const canRepeat = this.loopMode === 'restart' && (this.maxCycles === null || this.cycle < this.maxCycles);
+      if (canRepeat) this.restartAt = this.now + this.restartDelayMs;
+      else this.playing = false;
+      evs.push({ kind: 'process-complete', repeat: canRepeat });
+    } else if (this.engineStatus === 'blocked' && prev !== 'blocked') {
+      this.playing = false; evs.push({ kind: 'process-blocked' });
+    } else if (this.engineStatus === 'waiting' && prev !== 'waiting') {
+      evs.push({ kind: 'process-waiting' });
+    }
+    if (evs.length && this.onEvents) this.onEvents(evs);
+  }
+  _nextDue() {
+    let best = null;
+    const consider = (time, rank, order, apply) => {
+      if (!best || time < best.time || (time === best.time && (rank < best.rank || (rank === best.rank && order < best.order)))) best = { time, rank, order, apply };
+    };
+    // Rank orders same-instant events: arrivals, then completions, then starts.
+    this.transitAt.forEach((t0, id) => consider(t0 + this.transitionMs, 0, this.connOrder.get(id), () => this.engine.arrive(id)));
+    this.activeAt.forEach((t0, id) => consider(t0 + this.durationOf(id), 1, this.order.get(id), () => this.engine.complete(id)));
+    this.readyAt.forEach((t0, id) => consider(t0 + this.readyMs, 2, this.order.get(id), () => this.engine.start(id)));
+    if (this.restartAt !== null) consider(this.restartAt, 3, 0, () => {
+      this.cycle++; const keep = this.playing; this.reset(); this.playing = keep;
+      if (this.onEvents) this.onEvents([{ kind: 'cycle', cycle: this.cycle }]);
+    });
+    return best;
+  }
+  /* Advance logical time by dtLogical ms. Events are applied at their exact due time, so results are
+     identical whatever the frame rate or step size. */
+  isIdle() { return this.engineStatus === 'waiting' || this.engineStatus === 'blocked' || (this.engineStatus === 'completed' && this.restartAt === null); }
+  advance(dtLogical) {
+    if (this.isIdle()) return; // nothing can move until the viewer acts
+    const target = this.t + dtLogical;
+    let ev;
+    while ((ev = this._nextDue()) && ev.time <= target) {
+      const isRestart = ev.rank === 3;
+      this.now = ev.time;
+      ev.apply();
+      if (isRestart) return; // reset() already zeroed the clock for the new cycle
+      this._ingest();
+    }
+    this.t = target; this.now = target;
+  }
+  progressOf(id) {
+    const s = this.engine.actState.get(id);
+    if (s === 'completed') return 1;
+    if (s === 'active') return Math.min(1, (this.t - this.activeAt.get(id)) / this.durationOf(id));
+    return 0;
+  }
+  transitProgress(id) { return this.transitAt.has(id) ? Math.min(1, (this.t - this.transitAt.get(id)) / this.transitionMs) : 0; }
+  overallProgress() {
+    const ids = this.engine.countableIds();
+    if (!ids.length) return 0;
+    return ids.reduce((sum, id) => sum + this.progressOf(id), 0) / ids.length;
+  }
+}
+
+/* =====================================================================
+   5. ICONS  (premium simulated 3D: beveled tile, consistent top-left light)
+   ===================================================================== */
+const SVGNS = 'http://www.w3.org/2000/svg';
+function sv(tag, attrs, children) {
+  const el = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const k in attrs) el.setAttribute(k, String(attrs[k]));
+  if (children) children.forEach(c => c && el.appendChild(c));
+  return el;
+}
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b); const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60;
+  }
+  return [h, s * 100, l * 100];
+}
+const hsl = (h, s, l, a = 1) => `hsla(${h.toFixed(1)}, ${Math.max(0, Math.min(100, s)).toFixed(1)}%, ${Math.max(0, Math.min(100, l)).toFixed(1)}%, ${a})`;
+const safeColor = c => (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) ? c : '#3b82f6';
+
+function gearPath(cx, cy, rOut, rIn, teeth) {
+  const pts = []; const step = Math.PI * 2 / teeth;
+  for (let i = 0; i < teeth; i++) {
+    const a = i * step - Math.PI / 2;
+    const seq = [[a - step * 0.5, rIn], [a - step * 0.22, rIn], [a - step * 0.14, rOut], [a + step * 0.14, rOut], [a + step * 0.22, rIn]];
+    seq.forEach(([ang, r]) => pts.push(`${(cx + r * Math.cos(ang)).toFixed(2)} ${(cy + r * Math.sin(ang)).toFixed(2)}`));
+  }
+  return 'M' + pts.join(' L') + ' Z';
+}
+
+const GLYPHS = {
+  target: (g) => [
+    sv('circle', { cx: 58, cy: 58, r: 25, fill: g.satin }),
+    sv('circle', { cx: 58, cy: 58, r: 18, fill: g.accent }),
+    sv('circle', { cx: 58, cy: 58, r: 11, fill: g.satin }),
+    sv('circle', { cx: 58, cy: 58, r: 4.5, fill: g.accent }),
+    sv('path', { d: 'M59 57 L82 34', stroke: g.satin, 'stroke-width': 4, 'stroke-linecap': 'round' }),
+    sv('path', { d: 'M79 31 L88 28 L85 37 L82 34 Z', fill: g.accentLight }),
+    sv('path', { d: 'M83 27 L93 25 L89 34 Z', fill: g.accent, opacity: 0.9 })
+  ],
+  gauge: (g) => [
+    sv('rect', { x: 31, y: 70, width: 58, height: 11, rx: 5.5, fill: g.satin, opacity: 0.92 }),
+    sv('path', { d: 'M34 67 A26 26 0 0 1 86 67', fill: 'none', stroke: g.satin, 'stroke-width': 8, 'stroke-linecap': 'round' }),
+    sv('path', { d: 'M60 41 A26 26 0 0 1 86 67', fill: 'none', stroke: g.accent, 'stroke-width': 8, 'stroke-linecap': 'round' }),
+    sv('path', { d: 'M57.6 67 L60 45 L62.4 67 Z', fill: g.accentLight, transform: 'rotate(42 60 67)' }),
+    sv('circle', { cx: 60, cy: 67, r: 5.5, fill: g.satin }),
+    sv('circle', { cx: 60, cy: 67, r: 2.2, fill: g.accent })
+  ],
+  analyze: (g) => [
+    sv('rect', { x: 32, y: 60, width: 9, height: 18, rx: 2.5, fill: g.satin }),
+    sv('rect', { x: 45, y: 50, width: 9, height: 28, rx: 2.5, fill: g.satin }),
+    sv('rect', { x: 58, y: 40, width: 9, height: 38, rx: 2.5, fill: g.satin, opacity: 0.85 }),
+    sv('path', { d: 'M80 61 L90 71', stroke: g.satin, 'stroke-width': 7, 'stroke-linecap': 'round' }),
+    sv('circle', { cx: 72, cy: 52, r: 13, fill: 'rgba(255,255,255,0.22)', stroke: g.accentLight, 'stroke-width': 5 }),
+    sv('path', { d: 'M65 47 A8 8 0 0 1 72 43', fill: 'none', stroke: '#ffffff', 'stroke-width': 2.2, 'stroke-linecap': 'round', opacity: 0.85 })
+  ],
+  improve: (g) => [
+    sv('path', { d: gearPath(52, 62, 19, 14, 8), fill: g.satin }),
+    sv('circle', { cx: 52, cy: 62, r: 6.5, fill: g.accent }),
+    sv('rect', { x: 75, y: 44, width: 7, height: 32, rx: 3.5, fill: g.accent }),
+    sv('path', { d: 'M78.5 30 L89 45 L68 45 Z', fill: g.accentLight, 'stroke-linejoin': 'round' })
+  ],
+  control: (g) => [
+    sv('rect', { x: 29, y: 34, width: 62, height: 46, rx: 7, fill: 'rgba(255,255,255,0.16)', stroke: g.satin, 'stroke-width': 2.5 }),
+    sv('path', { d: 'M34 43 H86 M34 71 H86', stroke: g.accentLight, 'stroke-width': 1.6, 'stroke-dasharray': '3 3' }),
+    sv('path', { d: 'M34 57 H86', stroke: g.satin, 'stroke-width': 1.2, opacity: 0.6 }),
+    sv('polyline', { points: '35,59 42,51 49,61 56,49 63,58 70,52 77,61 85,54', fill: 'none', stroke: g.satin, 'stroke-width': 3, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    sv('circle', { cx: 56, cy: 49, r: 2.6, fill: g.accentLight }),
+    sv('circle', { cx: 77, cy: 61, r: 2.6, fill: g.accentLight })
+  ],
+  design: (g) => [
+    sv('path', { d: 'M36 80 L42 62 L74 30 L86 42 L54 74 Z', fill: g.satin }),
+    sv('path', { d: 'M74 30 L86 42 L90 38 A5 5 0 0 0 90 31 L83 26 A5 5 0 0 0 78 26 Z', fill: g.accent }),
+    sv('path', { d: 'M36 80 L42 62 L54 74 Z', fill: g.accentLight })
+  ],
+  automate: (g) => [
+    sv('path', { d: gearPath(50, 56, 18, 13, 8), fill: g.satin }),
+    sv('circle', { cx: 50, cy: 56, r: 6, fill: g.accent }),
+    sv('path', { d: gearPath(76, 70, 12, 8.5, 7), fill: g.accentLight }),
+    sv('circle', { cx: 76, cy: 70, r: 3.6, fill: g.satin })
+  ],
+  optimize: (g) => [
+    sv('polyline', { points: '32,76 46,62 58,68 84,40', fill: 'none', stroke: g.satin, 'stroke-width': 6, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+    sv('path', { d: 'M86 34 L88 52 L72 40 Z', fill: g.accentLight })
+  ],
+  generic: (g) => [
+    sv('rect', { x: 36, y: 36, width: 48, height: 40, rx: 8, fill: g.satin }),
+    sv('path', { d: 'M44 50 H76 M44 60 H68', stroke: g.accent, 'stroke-width': 4, 'stroke-linecap': 'round' })
+  ]
+};
+
+let iconSeq = 0;
+function buildIcon(iconMeta) {
+  const uid = 'ic' + (++iconSeq);
+  const color = safeColor(iconMeta && iconMeta.color);
+  const glyph = (iconMeta && GLYPHS[iconMeta.glyph]) ? iconMeta.glyph : 'generic';
+  const [h, s, l] = hexToHsl(color);
+  const id = k => `${uid}-${k}`;
+  const stop = (o, c) => sv('stop', { offset: o, 'stop-color': c });
+  const defs = sv('defs', null, [
+    sv('linearGradient', { id: id('face'), x1: 0, y1: 0, x2: 0.9, y2: 1 }, [stop(0, hsl(h, s, l + 20)), stop(0.5, hsl(h, s, l + 2)), stop(1, hsl(h, s + 4, l - 14))]),
+    sv('linearGradient', { id: id('side'), x1: 0, y1: 0, x2: 0, y2: 1 }, [stop(0, hsl(h, s, l - 18)), stop(1, hsl(h, s * 0.9, l - 32))]),
+    sv('linearGradient', { id: id('bevel'), x1: 0, y1: 0, x2: 0, y2: 1 }, [stop(0, 'rgba(255,255,255,0.75)'), stop(0.45, 'rgba(255,255,255,0.05)'), stop(1, 'rgba(0,0,0,0.25)')]),
+    sv('linearGradient', { id: id('well'), x1: 0, y1: 0, x2: 0, y2: 1 }, [stop(0, hsl(h, s, l - 12)), stop(1, hsl(h, s, l + 6))]),
+    sv('linearGradient', { id: id('wellEdge'), x1: 0, y1: 0, x2: 0, y2: 1 }, [stop(0, 'rgba(0,0,0,0.35)'), stop(1, 'rgba(255,255,255,0.35)')]),
+    sv('linearGradient', { id: id('satin'), x1: 0, y1: 0, x2: 0.6, y2: 1 }, [stop(0, '#ffffff'), stop(1, hsl(h, 55, 84))]),
+    sv('linearGradient', { id: id('accent'), x1: 0, y1: 0, x2: 0.5, y2: 1 }, [stop(0, hsl(h, s, l + 8)), stop(1, hsl(h, s, l - 14))]),
+    sv('linearGradient', { id: id('accentL'), x1: 0, y1: 0, x2: 0.4, y2: 1 }, [stop(0, hsl(h, s, l + 34)), stop(1, hsl(h, s, l + 10))]),
+    sv('radialGradient', { id: id('spec'), cx: 0.32, cy: 0.18, r: 0.55 }, [sv('stop', { offset: 0, 'stop-color': '#fff', 'stop-opacity': 0.55 }), sv('stop', { offset: 1, 'stop-color': '#fff', 'stop-opacity': 0 })]),
+    sv('clipPath', { id: id('clip') }, [sv('rect', { x: 10, y: 6, width: 100, height: 98, rx: 28 })]),
+    sv('filter', { id: id('drop'), x: '-30%', y: '-30%', width: '160%', height: '160%' }, [
+      sv('feDropShadow', { dx: 0, dy: 3, stdDeviation: 2.2, 'flood-color': hsl(h, s, Math.max(6, l - 34)), 'flood-opacity': 0.75 })
+    ])
+  ]);
+  const g = { satin: `url(#${id('satin')})`, accent: `url(#${id('accent')})`, accentLight: `url(#${id('accentL')})` };
+  return sv('svg', { viewBox: '0 0 120 120', 'aria-hidden': 'true', focusable: 'false' }, [
+    defs,
+    sv('rect', { x: 10, y: 16, width: 100, height: 98, rx: 28, fill: `url(#${id('side')})` }),
+    sv('rect', { x: 10, y: 6, width: 100, height: 98, rx: 28, fill: `url(#${id('face')})` }),
+    sv('rect', { x: 11, y: 7, width: 98, height: 96, rx: 27, fill: 'none', stroke: `url(#${id('bevel')})`, 'stroke-width': 2 }),
+    sv('rect', { x: 19, y: 15, width: 82, height: 80, rx: 21, fill: `url(#${id('well')})`, opacity: 0.55 }),
+    sv('rect', { x: 19.5, y: 15.5, width: 81, height: 79, rx: 20.5, fill: 'none', stroke: `url(#${id('wellEdge')})`, 'stroke-width': 1.4 }),
+    sv('g', { 'clip-path': `url(#${id('clip')})` }, [sv('ellipse', { cx: 44, cy: 18, rx: 52, ry: 26, fill: `url(#${id('spec')})` })]),
+    sv('g', { filter: `url(#${id('drop')})` }, GLYPHS[glyph](g))
+  ]);
+}
+
+const STATE_GLYPH = {
+  pending: () => [sv('circle', { cx: 6, cy: 6, r: 4.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 })],
+  ready: () => [sv('circle', { cx: 6, cy: 6, r: 4.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }), sv('path', { d: 'M6 1.5 A4.5 4.5 0 0 1 6 10.5 Z', fill: 'currentColor' })],
+  active: () => [sv('path', { d: 'M3.5 2 L10 6 L3.5 10 Z', fill: 'currentColor' })],
+  completed: () => [sv('path', { d: 'M2 6.4 L4.9 9.2 L10.2 3', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.9, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })],
+  blocked: () => [sv('circle', { cx: 6, cy: 6, r: 4.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }), sv('path', { d: 'M2.9 9.1 L9.1 2.9', stroke: 'currentColor', 'stroke-width': 1.6 })],
+  skipped: () => [sv('path', { d: 'M2 8 C2 3 9 3 9.5 7', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round' }), sv('path', { d: 'M7.5 6.5 L9.8 8.6 L11 5.6', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]
+};
+const STATE_LABEL = { pending: 'Pending', ready: 'Ready', active: 'Active', completed: 'Completed', blocked: 'Blocked', skipped: 'Skipped' };
+const STATE_HELP = {
+  pending: 'Waiting for earlier phases.', ready: 'Inputs available, about to start.', active: 'Running in the simulation.',
+  completed: 'Outputs handed on.', blocked: 'Cannot run on the selected path.', skipped: 'Not on the selected path.'
+};
+function stateGlyph(state) { return sv('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true', focusable: 'false' }, STATE_GLYPH[state]()); }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+
+/* =====================================================================
+   6. LAYOUT  (rank = longest path from a start; lanes order parallel work)
+   ===================================================================== */
+function computeLayoutModel(cfg) {
+  const ids = cfg.activities.map(a => a.id);
+  const inc = new Map(ids.map(id => [id, []])); const out = new Map(ids.map(id => [id, []]));
+  cfg.connections.forEach(c => { out.get(c.source).push(c.target); inc.get(c.target).push(c.source); });
+  const indeg = new Map(ids.map(id => [id, inc.get(id).length]));
+  const rank = new Map(); const order = [];
+  const q = ids.filter(id => indeg.get(id) === 0); q.forEach(id => rank.set(id, 0));
+  while (q.length) {
+    const id = q.shift(); order.push(id);
+    out.get(id).forEach(t => { rank.set(t, Math.max(rank.get(t) || 0, rank.get(id) + 1)); indeg.set(t, indeg.get(t) - 1); if (indeg.get(t) === 0) q.push(t); });
+  }
+  const ranks = [];
+  order.forEach(id => { const r = rank.get(id); (ranks[r] = ranks[r] || []).push(id); });
+  const lane = new Map();
+  ranks.forEach((list, r) => {
+    if (r > 0) {
+      const bary = id => { const ps = inc.get(id); return ps.length ? ps.reduce((s, p) => s + lane.get(p), 0) / ps.length : 0; };
+      list.sort((a, b) => bary(a) - bary(b) || ids.indexOf(a) - ids.indexOf(b));
+    }
+    list.forEach((id, i) => lane.set(id, i - (list.length - 1) / 2));
+  });
+  const maxLanes = Math.max(...ranks.map(l => l.length));
+  return { ranks, rank, lane, maxLanes, rankCount: ranks.length };
+}
+
+/* =====================================================================
+   7. APPLICATION  (rendering, controls, accessibility)
+   ===================================================================== */
+const App = (() => {
+  const $ = id => document.getElementById(id);
+  const reduceMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false, addEventListener() {} };
+  const ui = {
+    diagram: $('diagram'), svg: $('connectors'), play: $('btn-play'), playLabel: $('btn-play-label'), playIcon: $('btn-play-icon'),
+    replay: $('btn-replay'), speed: $('speed'), speedOut: $('speed-out'), loop: $('loop'),
+    status: $('status'), statusText: $('status-text'), progressLabel: $('progress-label'), progressTrack: $('progress-track'),
+    progressFill: $('progress-fill'), clock: $('clock'), decision: $('decision'), decisionTitle: $('decision-title'),
+    decisionPrompt: $('decision-prompt'), decisionOptions: $('decision-options'), completion: $('completion'), completionText: $('completion-text'),
+    blockedNote: $('blocked-note'), errorPanel: $('error-panel'), errorList: $('error-list'), inspector: $('inspector-body'),
+    logBody: $('log-body'), legend: $('legend'), announcer: $('announcer'), title: $('process-title'), desc: $('process-desc'),
+    flowSummary: $('flow-summary')
+  };
+  let cfg = null, engine = null, ctl = null;
+  let nodes = new Map(), connEls = new Map(), logRows = new Map();
+  let selected = null, rafId = null, lastTs = null, reduced = reduceMQ.matches, manualClock = false;
+  let pendingAnnouncements = [], lastClockText = '', layoutMode = 'h';
+  let resizeObs = null;
+
+  const fmt = ms => { const s = Math.max(0, ms) / 1000; const m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(1).padStart(4, '0')}`; };
+  const actName = id => engine.acts.get(id).name;
+
+  function announce(text) { pendingAnnouncements.push(text); }
+  function flushAnnouncements() {
+    if (!pendingAnnouncements.length) return;
+    const text = pendingAnnouncements.join(' ');
+    pendingAnnouncements = [];
+    ui.announcer.textContent = '';
+    setTimeout(() => { ui.announcer.textContent = text; }, 30);
+  }
+
+  /* ---------- Build DOM ---------- */
+  function build() {
+    nodes.forEach(n => n.el.remove()); nodes = new Map();
+    connEls.forEach(c => { c.g.remove(); if (c.label) c.label.remove(); }); connEls = new Map();
+    while (ui.svg.firstChild) ui.svg.removeChild(ui.svg.firstChild);
+    ui.svg.appendChild(sv('defs', null, [
+      sv('linearGradient', { id: 'connGrad', gradientUnits: 'userSpaceOnUse', x1: 0, y1: 0, x2: 1200, y2: 0 }, [
+        sv('stop', { offset: 0, 'stop-color': '#3b82f6' }), sv('stop', { offset: 0.5, 'stop-color': '#22d3ee' }), sv('stop', { offset: 1, 'stop-color': '#a78bfa' })
+      ]),
+      sv('radialGradient', { id: 'pGlow' }, [sv('stop', { offset: 0, 'stop-color': '#a5f3fc', 'stop-opacity': 0.9 }), sv('stop', { offset: 0.4, 'stop-color': '#22d3ee', 'stop-opacity': 0.35 }), sv('stop', { offset: 1, 'stop-color': '#22d3ee', 'stop-opacity': 0 })]),
+      ...['idle', 'transit', 'done', 'skipped'].map(k => sv('marker', { id: 'arrow-' + k, viewBox: '0 0 10 10', refX: 8.5, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse', markerUnits: 'userSpaceOnUse' }, [
+        sv('path', { d: 'M1 1 L9 5 L1 9 Z', fill: { idle: 'rgba(130,160,240,0.45)', transit: '#67e8f9', done: '#7dd3fc', skipped: 'rgba(150,160,190,0.3)' }[k] })
+      ]))
+    ]));
+
+    const total = cfg.activities.length;
+    cfg.activities.forEach((a, i) => {
+      const color = safeColor(a.icon && a.icon.color);
+      const [h, s, l] = hexToHsl(color);
+      const btn = el('button', 'node');
+      btn.type = 'button'; btn.dataset.id = a.id; btn.setAttribute('aria-pressed', 'false');
+      btn.style.setProperty('--node-color', color);
+      btn.style.setProperty('--node-glow', hsl(h, s, l + 8, 0.55));
+      const visual = el('span', 'node-visual');
+      const halo = el('span', 'halo');
+      const ringSvg = sv('svg', { class: 'ring', viewBox: '0 0 100 100', 'aria-hidden': 'true', focusable: 'false' }, [
+        sv('circle', { class: 'ring-track', cx: 50, cy: 50, r: 47 }),
+        sv('circle', { class: 'ring-progress', cx: 50, cy: 50, r: 47, 'stroke-dasharray': (2 * Math.PI * 47).toFixed(2), 'stroke-dashoffset': (2 * Math.PI * 47).toFixed(2)})
+      ]);
+      const lift = el('span', 'lift'); const flt = el('span', 'float'); flt.appendChild(buildIcon(a.icon)); lift.appendChild(flt);
+      const ground = el('span', 'ground'); const badge = el('span', 'badge');
+      visual.append(halo, ringSvg, ground, lift, badge);
+      const text = el('span', 'node-text');
+      const kicker = el('span', 'node-kicker', a.type === 'phase' ? `Phase ${i + 1}` : a.type);
+      const name = el('span', 'node-name', a.name);
+      const summary = a.summary ? el('span', 'node-summary', a.summary) : null;
+      const chip = el('span', 'chip');
+      text.append(kicker, name); if (summary) text.append(summary); text.append(chip);
+      btn.append(visual, text);
+      btn.addEventListener('click', () => select(a.id));
+      btn.addEventListener('keydown', onNodeKey);
+      ui.diagram.appendChild(btn);
+      nodes.set(a.id, { el: btn, flt, lift, ground, badge, chip, ring: ringSvg.querySelector('.ring-progress'), index: i, total, x: 0, y: 0, r: 0 });
+    });
+    cfg.connections.forEach(c => {
+      const base = sv('path', { class: 'conn-base' });
+      const fill = sv('path', { class: 'conn-fill' });
+      const flow = sv('path', { class: 'conn-flow' });
+      const particles = sv('g', { class: 'particles' });
+      for (let k = 0; k < 4; k++) {
+        particles.appendChild(sv('g', { opacity: 0 }, [sv('circle', { r: k === 0 ? 11 : 7, fill: 'url(#pGlow)' }), sv('circle', { r: k === 0 ? 3.2 : 2.1, fill: '#ecfeff' })]));
+      }
+      const g = sv('g', { class: 'conn', 'data-state': 'idle' }, [base, fill, flow, particles]);
+      ui.svg.appendChild(g);
+      let label = null;
+      const text = c.condition || c.label;
+      if (text) { label = el('span', 'conn-label', text); label.dataset.state = 'idle'; ui.diagram.appendChild(label); }
+      connEls.set(c.id, { g, base, fill, flow, particles: [...particles.children], label, len: 0 });
+    });
+
+    // Log + legend
+    ui.logBody.textContent = ''; logRows = new Map();
+    cfg.activities.forEach(a => {
+      const tr = el('tr');
+      const th = el('th'); th.scope = 'row';
+      const b = el('button', 'log-btn', a.name); b.type = 'button'; b.addEventListener('click', () => select(a.id, true));
+      th.appendChild(b);
+      const st = el('td'); const start = el('td', 'mono', '–'); const end = el('td', 'mono', '–');
+      tr.append(th, st, start, end); ui.logBody.appendChild(tr);
+      logRows.set(a.id, { btn: b, st, start, end });
+    });
+    ui.legend.textContent = '';
+    Object.keys(STATE_LABEL).forEach(k => {
+      const d = el('div'); const dt = el('dt'); const chip = el('span', 'chip'); chip.dataset.state = k;
+      chip.append(stateGlyph(k), document.createTextNode(STATE_LABEL[k])); dt.appendChild(chip);
+      const dd = el('dd', null, STATE_HELP[k]); d.append(dt, dd); ui.legend.appendChild(d);
+    });
+  }
+
+  function onNodeKey(e) {
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'];
+    if (!keys.includes(e.key)) return;
+    e.preventDefault();
+    const list = cfg.activities.map(a => a.id); const i = list.indexOf(e.currentTarget.dataset.id);
+    let j = i;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') j = Math.min(list.length - 1, i + 1);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') j = Math.max(0, i - 1);
+    if (e.key === 'Home') j = 0; if (e.key === 'End') j = list.length - 1;
+    nodes.get(list[j]).el.focus();
+  }
+
+  /* ---------- Layout ---------- */
+  function layout() {
+    if (!cfg) return;
+    const model = computeLayoutModel(cfg);
+    const W = ui.diagram.clientWidth;
+    const horizontal = W >= 620 && W / model.rankCount >= 128;
+    layoutMode = horizontal ? 'h' : 'v';
+    const pts = new Map();
+    let H;
+    if (horizontal) {
+      const colW = W / model.rankCount;
+      const icon = Math.max(72, Math.min(112, colW * 0.5));
+      const vis = icon + 28;
+      const laneH = vis + 128;
+      const hasLong = cfg.connections.some(c => model.rank.get(c.target) - model.rank.get(c.source) > 1);
+      const top = hasLong ? 46 : 16;
+      H = top + model.maxLanes * laneH;
+      const nodeW = Math.min(colW - 8, 240);
+      cfg.activities.forEach(a => {
+        const n = nodes.get(a.id); const st = n.el.style;
+        n.el.classList.remove('is-row'); st.setProperty('--icon', icon + 'px');
+        const cx = (model.rank.get(a.id) + 0.5) * colW;
+        const laneIdx = model.lane.get(a.id) + (model.maxLanes - 1) / 2;
+        const y0 = top + laneIdx * laneH;
+        st.left = (cx - nodeW / 2) + 'px'; st.top = y0 + 'px'; st.width = nodeW + 'px';
+        n.x = cx; n.y = y0 + vis / 2; n.r = vis / 2 - 2;
+        pts.set(a.id, n);
+      });
+    } else {
+      const multi = model.maxLanes > 1;
+      const icon = W < 380 ? 68 : 76;
+      const vis = icon + 28;
+      const laneW = W / model.maxLanes;
+      const rowH = multi ? vis + 120 : vis + 44;
+      const hasLong = cfg.connections.some(c => model.rank.get(c.target) - model.rank.get(c.source) > 1);
+      const left = !multi && hasLong ? 36 : 0;
+      H = model.rankCount * rowH + 8;
+      cfg.activities.forEach(a => {
+        const n = nodes.get(a.id); const st = n.el.style;
+        st.setProperty('--icon', icon + 'px');
+        const r = model.rank.get(a.id);
+        const y0 = r * rowH + 6;
+        if (!multi) {
+          n.el.classList.add('is-row');
+          st.left = left + 'px'; st.top = y0 + 'px'; st.width = (W - left) + 'px';
+          n.x = left + 6 + vis / 2;
+        } else {
+          n.el.classList.remove('is-row');
+          const laneIdx = model.lane.get(a.id) + (model.maxLanes - 1) / 2;
+          const cx = (laneIdx + 0.5) * laneW;
+          st.left = (cx - laneW / 2 + 2) + 'px'; st.top = y0 + 'px'; st.width = (laneW - 4) + 'px';
+          n.x = cx;
+        }
+        n.y = y0 + vis / 2; n.r = vis / 2 - 2;
+        pts.set(a.id, n);
+      });
+    }
+    ui.diagram.style.height = H + 'px';
+    ui.svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const grad = ui.svg.querySelector('#connGrad');
+    if (horizontal) { grad.setAttribute('x1', 0); grad.setAttribute('y1', 0); grad.setAttribute('x2', W); grad.setAttribute('y2', 0); }
+    else { grad.setAttribute('x1', 0); grad.setAttribute('y1', 0); grad.setAttribute('x2', 0); grad.setAttribute('y2', H); }
+
+    cfg.connections.forEach(c => {
+      const a = pts.get(c.source), b = pts.get(c.target); const ce = connEls.get(c.id);
+      const span = model.rank.get(c.target) - model.rank.get(c.source);
+      let d;
+      if (horizontal) {
+        if (span > 1) {
+          const lift = Math.min(a.y, b.y) - a.r - 34;
+          d = `M${a.x} ${a.y - a.r} C${a.x} ${lift}, ${b.x} ${lift}, ${b.x} ${b.y - b.r - 6}`;
+        } else if (Math.abs(a.y - b.y) < 1) d = `M${a.x + a.r} ${a.y} L${b.x - b.r - 6} ${b.y}`;
+        else { const sx = a.x + a.r, ex = b.x - b.r - 6, mx = (sx + ex) / 2; d = `M${sx} ${a.y} C${mx} ${a.y}, ${mx} ${b.y}, ${ex} ${b.y}`; }
+      } else {
+        const sx = a.x, sy = a.y + a.r, ex = b.x, ey = b.y - b.r - 6;
+        if (span > 1 && Math.abs(a.x - b.x) < 1) { const bx = Math.max(6, a.x - a.r - 30); d = `M${a.x - a.r} ${a.y} C${bx} ${a.y}, ${bx} ${b.y}, ${b.x - b.r - 6} ${b.y}`; }
+        else if (Math.abs(sx - ex) < 1) d = `M${sx} ${sy} L${ex} ${ey}`;
+        else { const my = (sy + ey) / 2; d = `M${sx} ${sy} C${sx} ${my}, ${ex} ${my}, ${ex} ${ey}`; }
+      }
+      [ce.base, ce.fill, ce.flow].forEach(p => p.setAttribute('d', d));
+      ce.len = ce.base.getTotalLength();
+      ce.fill.setAttribute('stroke-dasharray', `${ce.len} ${ce.len}`);
+      if (ce.label) {
+        // Labels sit in the gap between icons; when the gap is too small the label is hidden and
+        // the same text stays available in the inspector and the screen-reader flow summary.
+        const mid = ce.base.getPointAtLength(ce.len / 2);
+        ce.label.hidden = false;
+        if (!horizontal && model.maxLanes === 1) {
+          ce.label.style.transform = 'translate(0, -50%)';
+          ce.label.style.left = (a.x + 14) + 'px'; ce.label.style.top = mid.y + 'px';
+        } else {
+          const gap = horizontal ? (b.x - b.r) - (a.x + a.r) : (b.y - b.r) - (a.y + a.r);
+          const straight = horizontal && span === 1 && Math.abs(a.y - b.y) < 1;
+          // Horizontal labels may wrap to fit between icons; too narrow a gap hides them.
+          ce.label.style.whiteSpace = 'nowrap'; ce.label.style.maxWidth = '';
+          if (horizontal && span === 1 && ce.label.offsetWidth + 20 > gap) { ce.label.style.whiteSpace = 'normal'; ce.label.style.maxWidth = Math.max(0, gap - 20) + 'px'; }
+          ce.label.style.transform = straight ? 'translate(-50%, calc(-100% - 10px))' : '';
+          ce.label.style.left = mid.x + 'px'; ce.label.style.top = mid.y + 'px';
+          if (span === 1 && (horizontal ? gap < 70 : gap < ce.label.offsetHeight + 8)) ce.label.hidden = true;
+        }
+      }
+      applyConnState(c.id);
+    });
+    render();
+  }
+
+  /* ---------- State application ---------- */
+  function applyNodeState(id) {
+    const n = nodes.get(id); const s = engine.actState.get(id);
+    n.el.dataset.state = s;
+    n.chip.textContent = ''; n.chip.append(stateGlyph(s), document.createTextNode(STATE_LABEL[s]));
+    n.badge.textContent = '';
+    if (s === 'completed' || s === 'blocked' || s === 'skipped') { const g = stateGlyph(s); g.style.color = '#fff'; n.badge.appendChild(g); }
+    const a = engine.acts.get(id);
+    const pos = a.type === 'phase' ? `phase ${n.index + 1} of ${n.total}` : a.type;
+    n.el.setAttribute('aria-label', `${a.name}, ${pos}, ${STATE_LABEL[s]}. Show details.`);
+    const row = logRows.get(id);
+    row.st.textContent = STATE_LABEL[s];
+    const h = ctl.history.get(id) || {};
+    row.start.textContent = h.start !== undefined ? fmt(h.start) : '–';
+    row.end.textContent = h.end !== undefined ? fmt(h.end) : '–';
+    if (selected === id) renderInspector();
+  }
+  function applyConnState(id) {
+    const ce = connEls.get(id); const s = engine.connState.get(id);
+    ce.g.setAttribute('data-state', s);
+    ce.base.setAttribute('marker-end', `url(#arrow-${s})`);
+    if (ce.label) ce.label.dataset.state = s;
+    if (s !== 'transit') ce.particles.forEach(p => p.setAttribute('opacity', 0));
+  }
+
+  function onEvents(evs) {
+    let needStatus = false;
+    for (const e of evs) {
+      if (e.kind === 'reset') { cfg.activities.forEach(a => applyNodeState(a.id)); cfg.connections.forEach(c => applyConnState(c.id)); needStatus = true; continue; }
+      if (e.kind === 'activity') {
+        applyNodeState(e.id);
+        if (e.to === 'active') announce(`${actName(e.id)} started.`);
+        if (e.to === 'completed') announce(`${actName(e.id)} completed.`);
+        if (e.to === 'skipped') announce(`${actName(e.id)} skipped.`);
+        if (e.to === 'blocked') announce(`${actName(e.id)} blocked.`);
+      } else if (e.kind === 'connection') applyConnState(e.id);
+      else if (e.kind === 'decision') announce(`Decision needed at ${actName(e.id)}.`);
+      else if (e.kind === 'process-complete') announce(e.repeat ? 'Simulation complete. Repeating.' : 'Simulation complete.');
+      else if (e.kind === 'process-blocked') announce('Simulation cannot continue.');
+      else if (e.kind === 'cycle') announce(`Cycle ${e.cycle} started.`);
+      needStatus = true;
+    }
+    if (needStatus) updateStatus();
+  }
+
+  /* ---------- Status, decision, completion ---------- */
+  function processStatus() {
+    if (!engine) return 'invalid';
+    const es = ctl.engineStatus;
+    if (es === 'completed' && ctl.restartAt === null) return 'completed';
+    if (es === 'blocked') return 'blocked';
+    if (es === 'waiting') return 'waiting';
+    if (ctl.playing) return 'playing';
+    return ctl.t === 0 ? 'ready' : 'paused';
+  }
+  const STATUS_TEXT = { ready: ['○', 'Ready'], playing: ['▶', 'Playing'], paused: ['❚❚', 'Paused'], waiting: ['◆', 'Waiting for decision'], completed: ['✓', 'Completed'], blocked: ['⊘', 'Blocked'], invalid: ['✕', 'Invalid configuration'] };
+  let lastStatus = null;
+  function updateStatus() {
+    const st = processStatus();
+    ui.status.dataset.status = st;
+    ui.status.querySelector('.status-glyph').textContent = STATUS_TEXT[st][0];
+    ui.statusText.textContent = STATUS_TEXT[st][1] + (ctl && ctl.cycle > 1 && st !== 'invalid' ? ` · cycle ${ctl.cycle}` : '');
+    if (st !== lastStatus && (st === 'paused' || (st === 'playing' && lastStatus === 'paused'))) announce(st === 'paused' ? 'Paused.' : 'Resumed.');
+    lastStatus = st;
+    // Play button
+    const label = st === 'playing' || st === 'waiting' && ctl.playing ? 'Pause' : st === 'paused' ? 'Resume' : st === 'completed' || st === 'blocked' ? 'Play again' : 'Play';
+    ui.playLabel.textContent = label;
+    ui.playIcon.textContent = '';
+    ui.playIcon.appendChild(label === 'Pause'
+      ? sv('svg', { viewBox: '0 0 16 16', width: 16, height: 16 }, [sv('rect', { x: 3.5, y: 2.5, width: 3, height: 11, rx: 1, fill: 'currentColor' }), sv('rect', { x: 9.5, y: 2.5, width: 3, height: 11, rx: 1, fill: 'currentColor' })])
+      : sv('svg', { viewBox: '0 0 16 16', width: 16, height: 16 }, [sv('path', { d: 'M4 2.6 L13 8 L4 13.4 Z', fill: 'currentColor', 'stroke-linejoin': 'round' })]));
+    ui.play.disabled = st === 'invalid';
+    ui.replay.disabled = st === 'invalid';
+    // Decision panel
+    const pend = engine ? [...engine.pendingDecisions] : [];
+    if (pend.length) {
+      const id = pend[0]; const a = engine.acts.get(id);
+      ui.decision.hidden = false;
+      ui.decisionTitle.textContent = `Decision required: ${a.name}`;
+      ui.decisionPrompt.textContent = (a.decision && a.decision.prompt) || 'Choose the outcome to simulate. The simulation will not choose for you.';
+      if (ui.decisionOptions.dataset.for !== id) {
+        ui.decisionOptions.textContent = ''; ui.decisionOptions.dataset.for = id;
+        engine.out.get(id).forEach(c => {
+          const b = el('button', 'btn', `${c.condition || c.label} → ${actName(c.target)}`); b.type = 'button';
+          b.addEventListener('click', () => { if (!engine.pendingDecisions.has(id)) return; engine.choose(id, c.id); ctl._ingest(); announce(`Selected ${c.condition || c.label}.`); updateStatus(); render(); ensureLoop(); });
+          ui.decisionOptions.appendChild(b);
+        });
+      }
+    } else { ui.decision.hidden = true; ui.decisionOptions.dataset.for = ''; }
+    // Completion
+    if (st === 'completed' || (ctl && ctl.engineStatus === 'completed')) {
+      ui.completion.hidden = false;
+      const n = engine.countableIds().length;
+      ui.completionText.textContent = '';
+      const strong = el('strong', null, 'Simulation complete. ');
+      ui.completionText.append(strong, document.createTextNode(`${n} of ${n} ${n === 1 ? 'activity' : 'activities'} finished in ${fmt(ctl.completedAt)} of simulated time. ${ctl.restartAt !== null ? 'Next cycle starts shortly.' : 'No real project data was used.'}`));
+    } else ui.completion.hidden = true;
+    // Blocked
+    if (st === 'blocked') {
+      ui.blockedNote.hidden = false; ui.blockedNote.textContent = '';
+      ui.blockedNote.appendChild(el('strong', null, 'The simulation cannot continue. The last valid state is kept.'));
+      const ul = el('ul');
+      if (engine.blockReasons.size) engine.blockReasons.forEach((r, id) => ul.appendChild(el('li', null, `${actName(id)} ${r}.`)));
+      else ul.appendChild(el('li', null, 'No remaining activity can start, and the completion criteria are not met.'));
+      ui.blockedNote.appendChild(ul);
+    } else ui.blockedNote.hidden = true;
+    updateProgressText();
+  }
+  function updateProgressText() {
+    const ids = engine.countableIds(); const done = ids.filter(id => engine.actState.get(id) === 'completed').length;
+    const noun = cfg.activities.every(a => a.type === 'phase') ? 'phases' : 'activities';
+    ui.progressLabel.textContent = `${done} of ${ids.length} ${noun} complete`;
+    ui.progressTrack.setAttribute('aria-valuenow', String(Math.round(done / Math.max(1, ids.length) * 100)));
+    ui.progressTrack.setAttribute('aria-valuetext', `${done} of ${ids.length} ${noun} complete`);
+  }
+
+  /* ---------- Inspector ---------- */
+  function select(id, focusNode) {
+    selected = id;
+    nodes.forEach((n, k) => n.el.setAttribute('aria-pressed', String(k === id)));
+    logRows.forEach((r, k) => { if (k === id) r.btn.setAttribute('aria-current', 'true'); else r.btn.removeAttribute('aria-current'); });
+    renderInspector();
+    if (focusNode) nodes.get(id).el.focus({ preventScroll: true });
+  }
+  function renderInspector() {
+    const a = engine.acts.get(selected); const s = engine.actState.get(selected); const h = ctl.history.get(selected) || {};
+    const body = ui.inspector; body.textContent = '';
+    const head = el('div', 'inspector-head');
+    const ic = el('div', 'inspector-icon'); ic.appendChild(buildIcon(a.icon));
+    const tt = el('div', 'inspector-title');
+    const n = nodes.get(selected);
+    tt.append(el('span', 'node-kicker', a.type === 'phase' ? `Phase ${n.index + 1} of ${n.total}` : a.type), el('h3', null, a.name));
+    const chip = el('span', 'chip'); chip.style.justifySelf = 'start'; chip.dataset.state = s;
+    chip.append(stateGlyph(s), document.createTextNode(STATE_LABEL[s])); tt.appendChild(chip);
+    head.append(ic, tt); body.appendChild(head);
+    if (a.description) body.appendChild(el('p', 'inspector-desc', a.description));
+    const io = el('div', 'io-grid');
+    [['Inputs', a.inputs], ['Outputs', a.outputs]].forEach(([title, list]) => {
+      const box = el('div'); box.appendChild(el('h4', null, title));
+      const ul = el('ul');
+      (list && list.length ? list : ['None specified']).forEach(x => ul.appendChild(el('li', null, x)));
+      box.appendChild(ul); io.appendChild(box);
+    });
+    body.appendChild(io);
+    const rel = el('div', 'rel');
+    const preds = engine.inc.get(selected).map(c => actName(c.source));
+    const succs = engine.out.get(selected).map(c => actName(c.target) + (c.condition ? ` (if ${c.condition})` : ''));
+    const relBox = (t, txt, mono) => { const d = el('div'); d.append(el('h4', null, t), el('p', mono ? 'mono' : null, txt)); return d; };
+    rel.append(
+      relBox('Depends on', preds.length ? preds.join(', ') + (preds.length > 1 ? ` (${(a.join || 'and').toUpperCase()} merge)` : '') : 'Starting activity'),
+      relBox('Leads to', succs.length ? succs.join(', ') : 'End of process'),
+      relBox('Simulated timing', h.start !== undefined ? `Start ${fmt(h.start)}${h.end !== undefined ? ` · Finish ${fmt(h.end)}` : ''}` : (s === 'blocked' && engine.blockReasons.get(selected)) ? `Blocked: ${engine.blockReasons.get(selected)}` : 'Not started', true)
+    );
+    body.appendChild(rel);
+  }
+
+  /* ---------- Frame rendering (reads the logical clock only) ---------- */
+  function render() {
+    if (!ctl) return;
+    const t = ctl.t;
+    nodes.forEach((n, id) => {
+      const s = engine.actState.get(id);
+      let bob = 0;
+      if (!reduced) bob = Math.sin(t / 1000 * (Math.PI * 2 / 3.6) + n.index * 1.3) * (s === 'active' ? 4.5 : 2.5);
+      n.flt.style.transform = `translate3d(0, ${bob.toFixed(2)}px, 0)`;
+      const lift = s === 'active' ? 8 : 0;
+      n.ground.style.transform = `scale(${(1 - (lift - bob) * 0.012).toFixed(3)})`;
+      n.ground.style.opacity = (0.95 - (lift - bob) * 0.03).toFixed(2);
+      const C = 2 * Math.PI * 47;
+      n.ring.setAttribute('stroke-dashoffset', (C * (1 - ctl.progressOf(id))).toFixed(2));
+    });
+    connEls.forEach((ce, id) => {
+      if (engine.connState.get(id) !== 'transit' || !ce.len) return;
+      const p = ctl.transitProgress(id);
+      ce.fill.setAttribute('stroke-dashoffset', (ce.len * (1 - p)).toFixed(2));
+      if (reduced) { ce.flow.setAttribute('stroke-dashoffset', '0'); ce.particles.forEach(g => g.setAttribute('opacity', 0)); return; }
+      ce.flow.setAttribute('stroke-dashoffset', (-(t * 0.045) % 16).toFixed(2));
+      ce.particles.forEach((g, k) => {
+        const q = p - k * 0.07;
+        if (q < 0 || q > 1) { g.setAttribute('opacity', 0); return; }
+        const pt = ce.base.getPointAtLength(q * ce.len);
+        g.setAttribute('transform', `translate(${pt.x.toFixed(1)} ${pt.y.toFixed(1)})`);
+        g.setAttribute('opacity', (k === 0 ? 1 : 0.75 - k * 0.15).toFixed(2));
+      });
+    });
+    ui.progressFill.style.width = (ctl.overallProgress() * 100).toFixed(2) + '%';
+    const ct = `Simulated time ${fmt(t)}${ctl.cycle > 1 ? ` · cycle ${ctl.cycle}` : ''}`;
+    if (ct !== lastClockText) { ui.clock.textContent = ct; lastClockText = ct; }
+  }
+
+  /* ---------- Animation loop ---------- */
+  function frame(ts) {
+    rafId = null;
+    if (lastTs === null) lastTs = ts;
+    const dt = Math.min(100, ts - lastTs); lastTs = ts;
+    if (ctl.playing) ctl.advance(dt * ctl.speed);
+    render();
+    flushAnnouncements();
+    if (ctl.playing && !document.hidden && !ctl.isIdle()) rafId = requestAnimationFrame(frame);
+    else lastTs = null;
+  }
+  function ensureLoop() {
+    if (manualClock) return;
+    if (ctl && ctl.playing && rafId === null && !document.hidden && !ctl.isIdle()) { lastTs = null; rafId = requestAnimationFrame(frame); }
+  }
+  function stopLoop() { if (rafId !== null) cancelAnimationFrame(rafId); rafId = null; lastTs = null; }
+
+  /* ---------- Controls ---------- */
+  function play() {
+    if (!ctl) return;
+    const st = processStatus();
+    if (st === 'completed' || st === 'blocked') { ctl.replay(); }
+    ctl.playing = true; updateStatus(); ensureLoop(); flushAnnouncements();
+  }
+  function pause() { if (!ctl) return; ctl.playing = false; stopLoop(); updateStatus(); render(); flushAnnouncements(); }
+  function togglePlay() { if (ctl && ctl.playing) pause(); else play(); }
+  function replay() {
+    if (!ctl) return;
+    stopLoop(); ctl.replay(); ctl.playing = true; lastStatus = 'ready';
+    announce('Replaying from the start.'); updateStatus(); render(); ensureLoop(); flushAnnouncements();
+  }
+  function setSpeed(v) {
+    const sp = Math.min(3, Math.max(0.5, Number(v) || 1));
+    if (ctl) ctl.speed = sp;
+    document.documentElement.style.setProperty('--speed', String(sp));
+    ui.speedOut.textContent = sp.toFixed(2) + '×';
+    ui.speed.setAttribute('aria-valuetext', `${sp} times`);
+    if (Number(ui.speed.value) !== sp) ui.speed.value = String(sp);
+  }
+
+  ui.play.addEventListener('click', togglePlay);
+  ui.replay.addEventListener('click', replay);
+  ui.speed.addEventListener('input', () => setSpeed(ui.speed.value));
+  ui.loop.addEventListener('change', () => {
+    if (!ctl) return;
+    ctl.loopMode = ui.loop.checked ? 'restart' : 'stop';
+    if (!ui.loop.checked && ctl.restartAt !== null) { ctl.restartAt = null; ctl.playing = false; stopLoop(); }
+    updateStatus();
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopLoop(); else ensureLoop(); });
+  const onReduce = () => {
+    reduced = reduceMQ.matches; render();
+  };
+  if (reduceMQ.addEventListener) reduceMQ.addEventListener('change', onReduce);
+
+  /* ---------- Load ---------- */
+  function showInvalid(result) {
+    stopLoop();
+    nodes.forEach(n => n.el.remove()); nodes = new Map();
+    connEls.forEach(c => { c.g.remove(); if (c.label) c.label.remove(); }); connEls = new Map();
+    engine = null; ctl = null; cfg = null;
+    ui.errorPanel.hidden = false; ui.errorList.textContent = '';
+    result.errors.forEach(e => ui.errorList.appendChild(el('li', null, e)));
+    ui.diagram.style.height = '0px';
+    ui.decision.hidden = true; ui.completion.hidden = true; ui.blockedNote.hidden = true;
+    ui.inspector.textContent = ''; ui.inspector.appendChild(el('p', 'inspector-desc', 'No valid process to inspect.'));
+    ui.logBody.textContent = '';
+    ui.status.dataset.status = 'invalid';
+    ui.status.querySelector('.status-glyph').textContent = STATUS_TEXT.invalid[0];
+    ui.statusText.textContent = STATUS_TEXT.invalid[1];
+    ui.play.disabled = true; ui.replay.disabled = true;
+    ui.progressLabel.textContent = 'No valid process loaded';
+    ui.progressFill.style.width = '0%';
+  }
+
+  function load(config, opts = {}) {
+    const result = validateConfig(config);
+    if (result.warnings.length && window.console) result.warnings.forEach(w => console.warn('[process config]', w));
+    if (!result.valid) { showInvalid(result); return result; }
+    stopLoop();
+    cfg = config; ui.errorPanel.hidden = true;
+    ui.title.textContent = '';
+    const acr = el('span', 'acronym', cfg.process.name); ui.title.appendChild(acr);
+    ui.desc.textContent = cfg.process.description || '';
+    document.title = `${cfg.process.name} Process Simulator`;
+    engine = new ProcessEngine(cfg);
+    ctl = new PlaybackController(engine, cfg, null);
+    build();
+    ctl.onEvents = onEvents;
+    ui.loop.checked = cfg.process.loop.mode === 'restart';
+    setSpeed(cfg.process.animation.speed);
+    ui.flowSummary.textContent = `${cfg.process.name} has ${cfg.activities.length} activities: ` +
+      cfg.connections.map(c => `${actName(c.source)} leads to ${actName(c.target)}${c.condition ? ` when ${c.condition}` : ''}`).join('; ') + '.';
+    lastStatus = null; selected = null;
+    cfg.activities.forEach(a => applyNodeState(a.id));
+    selected = cfg.activities[0].id; select(selected);
+    layout();
+    updateStatus();
+    if (!resizeObs && window.ResizeObserver) { resizeObs = new ResizeObserver(() => layout()); resizeObs.observe(ui.diagram); }
+    const autoplay = opts.autoplay !== undefined ? opts.autoplay : !reduced;
+    if (autoplay) { ctl.playing = true; updateStatus(); ensureLoop(); }
+    return result;
+  }
+  if (!window.ResizeObserver) window.addEventListener('resize', () => layout());
+
+  return {
+    load,
+    play, pause, replay, setSpeed, select,
+    /* Test hooks: freeze the rAF loop and drive the logical clock directly. */
+    useManualClock(on) { manualClock = !!on; if (on) stopLoop(); else ensureLoop(); },
+    step(ms) { if (ctl) { ctl.advance(ms * ctl.speed); render(); flushAnnouncements(); } },
+    get engine() { return engine; }, get controller() { return ctl; }, get layoutMode() { return layoutMode; },
+    get status() { return engine ? processStatus() : 'invalid'; }
+  };
+})();
+
+window.ProcessApp = Object.assign(App, { PROCESS_CONFIG, validateConfig, ProcessEngine, PlaybackController });
+App.load(PROCESS_CONFIG);
+</script>
+</body>
+</html>
